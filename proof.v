@@ -2,16 +2,10 @@ Definition Lem := (forall Q: Prop, Q \/ ~Q).
 
 Definition C (P: Prop) := Lem -> P.
 
-Lemma c_unit: forall P: Prop, P -> C P.
-Proof.
-    intros P vP LEM; assumption.
-Qed.
+Definition c_unit: forall P: Prop, P -> C P := (fun (P: Prop) (vP: P) (lem: Lem) => vP).
 
-Lemma c_bind: forall P Q: Prop, C P -> (P -> C Q) -> C Q.
-Proof.
-    intros P Q vCP HPQ LEM.
-    apply (HPQ (vCP LEM) LEM).
-Qed.
+Definition c_bind: forall P Q: Prop, C P -> (P -> C Q) -> C Q := (fun (P: Prop) (Q: Prop)
+(vcP: C P) (f: P -> C Q) (lem: Lem) => f (vcP lem) lem).
 
 Lemma c_prop1: forall (f: Prop -> Prop), (forall P: Prop, C (f P)) -> C (forall P: Prop, f P).
 Proof.
@@ -31,6 +25,30 @@ Proof.
     apply (LEM P).
 Qed.
 
+Theorem c_monad_1: forall (A B: Prop) (vA: A) (f: A -> C B),
+    c_bind _ _ (c_unit _ vA) f = f vA.
+Proof.
+    intros A B vA f.
+    unfold c_unit; unfold c_bind. change (fun x => f vA x) with (f vA).
+    reflexivity.
+Qed.
+
+Theorem c_monad_2: forall (A: Prop) (vcA: C A),
+    c_bind _ _ vcA (c_unit _) = vcA.
+Proof.
+    intros A vcA.
+    unfold c_unit; unfold c_bind. change (fun x => vcA x) with vcA.
+    reflexivity.
+Qed.
+
+Theorem c_monad_3: forall (P Q R: Prop) (vcP: C P) (f: P -> C Q) (g: Q -> C R),
+    c_bind _ _ vcP (fun (x: P) => c_bind _ _ (f x) g) =
+     c_bind _ _ (c_bind _ _ vcP f) g.
+Proof.
+    intros P Q R vcP f g.
+    unfold c_unit; unfold c_bind. reflexivity.
+Qed.
+ 
 Ltac cremove_0 H X Y Z := let a := fresh "H" in pose proof (c_prop2 _ _ H) as a;
 apply (c_bind _ Z) in a; [ assumption | ]; let b := fresh "H" in
 intro b; move b before H; clear H; clear a; rename b into H.
