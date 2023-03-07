@@ -1,105 +1,106 @@
-Definition Lem := (forall Q: Prop, Q \/ ~Q).
+Definition Lem (b: Prop -> Prop) := (forall Q: Prop, b Q -> Q \/ ~Q).
 
-Definition C (P: Prop) := Lem -> P.
+Definition C (b: Prop -> Prop) (P: Prop) := Lem b -> P.
 
-Definition c_unit: forall P: Prop, P -> C P := (fun (P: Prop) (vP: P) (lem: Lem) => vP).
+Definition c_unit: forall (b: Prop -> Prop) (P: Prop), P -> C b P := (fun (b: Prop -> Prop) (P: Prop) (vP: P) (lem: Lem b) => vP).
 
-Definition c_bind: forall P Q: Prop, C P -> (P -> C Q) -> C Q := (fun (P: Prop) (Q: Prop)
-(vcP: C P) (f: P -> C Q) (lem: Lem) => f (vcP lem) lem).
+Definition c_bind: forall (b: Prop -> Prop) (P Q: Prop), C b P -> (P -> C b Q) -> C b Q := (fun (b: Prop -> Prop) (P: Prop) (Q: Prop)
+(vcP: C b P) (f: P -> C b Q) (lem: Lem b) => f (vcP lem) lem).
 
-Lemma c_prop1: forall (f: Prop -> Prop), (forall P: Prop, C (f P)) -> C (forall P: Prop, f P).
+Lemma c_prop1: forall (b f: Prop -> Prop), (forall P: Prop, C b (f P)) -> C b (forall P: Prop, f P).
 Proof.
-    intros f H LEM P.
+    intros b f H LEM P.
     apply (H P LEM).
 Qed.
 
-Lemma c_prop2: forall (P Q: Prop), (P -> C Q) -> C (P -> Q).
+Lemma c_prop2: forall (b: Prop -> Prop) (P Q: Prop), (P -> C b Q) -> C b (P -> Q).
 Proof.
-    intros P Q HPQ LEM vP.
+    intros b P Q HPQ LEM vP.
     apply (HPQ vP LEM).
 Qed.
 
-Lemma c_lem: forall P: Prop, C (P \/ ~P).
+Lemma c_lem: forall (b: Prop -> Prop) (P: Prop), b P -> C b (P \/ ~P).
 Proof.
-    intros P LEM.
+    intros b P HP LEM.
     apply (LEM P).
+    assumption.
 Qed.
 
-Theorem c_monad_1: forall (A B: Prop) (vA: A) (f: A -> C B),
-    c_bind _ _ (c_unit _ vA) f = f vA.
+Theorem c_monad_1: forall (b: Prop -> Prop) (A B: Prop) (vA: A) (f: A -> C b B),
+    c_bind _ _ _ (c_unit _ _ vA) f = f vA.
 Proof.
-    intros A B vA f.
+    intros b A B vA f.
     unfold c_unit; unfold c_bind. change (fun x => f vA x) with (f vA).
     reflexivity.
 Qed.
 
-Theorem c_monad_2: forall (A: Prop) (vcA: C A),
-    c_bind _ _ vcA (c_unit _) = vcA.
+Theorem c_monad_2: forall (b: Prop -> Prop) (A: Prop) (vcA: C b A),
+    c_bind _ _ _ vcA (c_unit _ _) = vcA.
 Proof.
-    intros A vcA.
+    intros b A vcA.
     unfold c_unit; unfold c_bind. change (fun x => vcA x) with vcA.
     reflexivity.
 Qed.
 
-Theorem c_monad_3: forall (P Q R: Prop) (vcP: C P) (f: P -> C Q) (g: Q -> C R),
-    c_bind _ _ vcP (fun (x: P) => c_bind _ _ (f x) g) =
-     c_bind _ _ (c_bind _ _ vcP f) g.
+Theorem c_monad_3: forall (b: Prop -> Prop) (P Q R: Prop) (vcP: C b P) (f: P -> C b Q) (g: Q -> C b R),
+    c_bind _ _ _ vcP (fun (x: P) => c_bind _ _ _ (f x) g) =
+     c_bind _ _ _ (c_bind _ _ _ vcP f) g.
 Proof.
-    intros P Q R vcP f g.
+    intros b P Q R vcP f g.
     unfold c_unit; unfold c_bind. reflexivity.
 Qed.
  
-Ltac cremove_0 H X Y Z := let a := fresh "H" in pose proof (c_prop2 _ _ H) as a;
-apply (c_bind _ Z) in a; [ assumption | ]; let b := fresh "H" in
+Ltac cremove_0 bo H X Y Z := let a := fresh "H" in pose proof (c_prop2 bo _ _ H) as a;
+apply (c_bind bo _ Z) in a; [ assumption | ]; let b := fresh "H" in
 intro b; move b before H; clear H; clear a; rename b into H.
 
-Ltac cremove_1 H X Y Z := 
+Ltac cremove_1 bo H X Y Z := 
     let a := fresh "H" in assert (X -> Y) as a;
-    [ let b := fresh "H" in intro b; apply (c_unit X) in b; apply H in b; assumption
+    [ let b := fresh "H" in intro b; apply (c_unit bo X) in b; apply H in b; assumption
      | clear H; rename a into H ].
 
-Ltac cremove_2 H X Y :=
-    apply (c_bind _ Y) in H; [assumption | ]; let a := fresh "H" in
+Ltac cremove_2 bo H X Y :=
+    apply (c_bind _ _ Y) in H; [assumption | ]; let a := fresh "H" in
     intro a; move a before H; clear H; rename a into H.
 
 
-Lemma cremove_hyp: forall P Q: Prop, C (P -> Q) -> C P -> C Q.
+Lemma cremove_hyp: forall (b: Prop -> Prop) (P Q: Prop), C b (P -> Q) -> C b P -> C b Q.
 Proof.
-    intros P Q H1 H2.
-    cremove_2 H1 (P -> Q) Q.
-    cremove_2 H2 P Q.
+    intros b P Q H1 H2.
+    cremove_2 b H1 (P -> Q) Q.
+    cremove_2 b H2 P Q.
     apply H1 in H2. apply c_unit; assumption.
 Qed.
 
-Ltac cremove_3 H X Y :=
-    let a := fresh "H" in assert (a := cremove_hyp X Y H); move a before H; clear H; rename a into H
+Ltac cremove_3 bo H X Y :=
+    let a := fresh "H" in assert (a := cremove_hyp _ X Y H); move a before H; clear H; rename a into H
 .
 
 Ltac cremove := repeat lazymatch goal with
- | [ H: ?X -> C ?Y |- C ?Z ] =>
-    cremove_0 H X Y Z
- | [ H: C ?X -> ?Y |- C ?Z ] =>
-    cremove_1 H X Y Z
- | [ H: C ?X |- C ?Y ] =>
-    cremove_2 H X Y
- | [ |- C (?X -> ?Y) ] =>
+ | [ H: ?X -> C ?b ?Y |- C _ ?Z ] =>
+    cremove_0 b H X Y Z
+ | [ H: C ?b ?X -> ?Y |- C _ ?Z ] =>
+    cremove_1 b H X Y Z
+ | [ H: C ?b ?X |- C _ ?Y ] =>
+    cremove_2 b H X Y
+ | [ |- C _ (?X -> ?Y) ] =>
     apply (c_prop1 X Y)
  | [ |- ?X -> _ ] => intro
- | [ H: C (?X -> ?Y) |- _ ] =>
-    cremove_3 H X Y
+ | [ H: C ?b (?X -> ?Y) |- _ ] =>
+    cremove_3 b H X Y
 end.
 
 Ltac cassumption := lazymatch goal with
- | [ H: ?X |- C ?X ] => apply c_unit; assumption
+ | [ H: ?X |- C _ ?X ] => apply c_unit; assumption
 end.
 
-Ltac capply H := apply (c_unit _ H).
+Ltac capply H := apply (c_unit _ _ H).
 Ltac decided := apply c_unit.
 
 Ltac cdestruct H := cremove; destruct H.
-Lemma o_and: forall P Q: Prop, C P /\ C Q -> C (P /\ Q).
+Lemma o_and: forall (b: Prop -> Prop) (P Q: Prop), C b P /\ C b Q -> C b (P /\ Q).
 Proof.
-    intros P Q H.
+    intros b P Q H.
     destruct H as [ H0 H1 ].
     cremove.
     decided.
@@ -108,165 +109,176 @@ Qed.
 
 
 Ltac csplit := lazymatch goal with
- | [ |- C (?A /\ ?B) ] => apply (o_and A B); split
+ | [ |- C _ (?A /\ ?B) ] => apply (o_and _ A B); split
 end.
 
-Ltac exm P := let a := fresh "H" in pose proof (c_lem P) as a;
-  let b := type of a in let c := lazymatch goal with | [ |- C ?Z ] => Z end in cremove_2 a b c; destruct a.
+Ltac exm P := match goal with
+| [ HP : ?b P |- _ ] => let a := fresh "H" in pose proof (c_lem b P HP) as a;
+  let k := type of a in let c := lazymatch goal with | [ |- C b ?Z ] => Z end in cremove_2 b a k c; destruct a
+end.
 
-Lemma classic_false: (exists P: Prop, C P /\ ~P) -> C False.
+Lemma classic_false: forall (b: Prop -> Prop), (exists P: Prop, C b P /\ ~P) -> C b False.
 Proof.
-    intros H.
+    intros b H.
     destruct H. destruct H.
     cremove. absurd x; assumption.
 Qed.
 
-Lemma classic_not: forall P: Prop, (P -> C False) -> C (~ P).
+Lemma classic_not: forall (b: Prop -> Prop) (P: Prop), b P -> (P -> C b False) -> C b (~ P).
 Proof.
-    intros P H.
+    intros b P HP H LEM.
+    destruct (LEM P HP) as [vP | vnP].
+    pose proof (H vP LEM) as vFalse; destruct vFalse.
+    apply vnP.
+Qed.
+Proof.
+    intros b P HP H.
     exm P.
     apply H in H0.
     cremove; inversion H0.
     cassumption.
 Qed.
 
-Lemma o_mp: forall P Q: Prop, C (P -> Q) -> C P -> C Q.
+Lemma o_mp: forall (b: Prop -> Prop) (P Q: Prop), C b (P -> Q) -> C b P -> C b Q.
 Proof.
-    intros P Q H1 H2.
+    intros b P Q H1 H2.
     cremove. specialize (H1 H2). cassumption.
 Qed.
 
-Lemma o_fmapd: forall A B P: Prop, C (A \/ B) -> (A -> C P) -> (B -> C P) -> C P.
+Lemma o_fmapd: forall (b: Prop -> Prop) (A B P: Prop), C b (A \/ B) -> (A -> C b P) -> (B -> C b P) -> C b P.
 Proof.
-    intros A B P.
+    intros b A B P.
     cremove.
     destruct H. capply (H0 H).
     capply (H1 H).
 Qed.
 
-Lemma o_dfmapo: forall P A B: Prop, C P -> (P -> C (A \/ B)) -> C (A \/ B).
+Lemma o_dfmapo: forall (b: Prop -> Prop) (P A B: Prop), C b P -> (P -> C b (A \/ B)) -> C b (A \/ B).
 Proof.
-    intros P A B H1 H2.
+    intros b P A B H1 H2.
     cremove.
     capply (H2 H1).
 Qed.
 
-Lemma o_dfmapd: forall A B P Q: Prop, C (A \/ B) -> (A -> C (P \/ Q)) -> (B -> C (P \/ Q)) -> C (P \/ Q).
+Lemma o_dfmapd: forall (b: Prop -> Prop) (A B P Q: Prop), C b (A \/ B) -> (A -> C b (P \/ Q)) ->
+    (B -> C b (P \/ Q)) -> C b (P \/ Q).
 Proof.
-    intros A B P Q H1 H2 H3.
+    intros b A B P Q H1 H2 H3.
     cremove.
     destruct H1.
     capply (H2 H).
     capply (H3 H).
 Qed.
 
-Lemma o_fmapo_c: forall P Q: Prop, (P -> C Q) -> C P -> C Q.
+Lemma o_fmapo_c: forall (b: Prop -> Prop) (P Q: Prop), (P -> C b Q) -> C b P -> C b Q.
 Proof.
-intros P Q H R.
+intros b P Q H R.
 cremove.
 capply (H R).
 Qed.
 
-Lemma  dis_elim: forall A B P: Prop, C (A \/ B) -> C (A -> P) -> C (B -> P) -> C P.
+Lemma  dis_elim: forall (b: Prop -> Prop) (A B P: Prop), C b (A \/ B) -> C b (A -> P) -> C b (B -> P) -> C b P.
 Proof.
-intros A B P H0 H1 H2.
+intros b A B P H0 H1 H2.
 cremove.
 destruct H0. pose proof (H1 H). capply H0.
 pose proof (H2 H). capply H0.
 Qed.
 
-Lemma o_red: forall P: Prop, C (C P) -> C P.
+Lemma o_red: forall (b: Prop -> Prop) (P: Prop), C b (C b P) -> C b P.
 Proof.
-    intros P H.
+    intros b P H.
     cremove.
     assumption.
 Qed.
 
-Lemma o_mp_inv': forall P Q: Prop, (C P -> C Q) -> C (P -> Q).
+Lemma o_mp_inv': forall (b: Prop -> Prop) (P Q: Prop), (C b P -> C b Q) -> C b (P -> Q).
 Proof.
-    intros P Q H1.
+    intros b P Q H1.
     cremove.
     cassumption.
 Qed.
 
-Lemma c_mp: forall A B P Q: Prop, C (A \/ B) -> C (A -> P) -> C (B -> Q) -> C (P \/ Q).
+Lemma c_mp: forall (b: Prop -> Prop) (A B P Q: Prop), C b (A \/ B) -> C b (A -> P) -> C b (B -> Q) -> C b (P \/ Q).
 Proof.
-    intros A B P Q D Cap Cbq.
+    intros b A B P Q D Cap Cbq.
     cremove.
     destruct D.
     specialize (Cap H); capply (or_introl Q Cap).
     specialize (Cbq H); capply (or_intror P Cbq).
 Qed.
 
-Lemma PP: forall P Q: Prop, (P -> Q) /\ (~P -> Q) -> C Q.
+Lemma PP: forall (b: Prop -> Prop) (P Q: Prop), b P -> (P -> Q) /\ (~P -> Q) -> C b Q.
 Proof.
-    intros P Q Hpq.
-    pose proof (c_lem P).
+    intros b P Q HP Hpq.
+    pose proof (c_lem b P).
     cremove. decided.
     destruct H.
+    assumption.
     destruct Hpq as [ Hpq _ ]. apply (Hpq H).
     destruct Hpq as [ _ Hpq ]. apply (Hpq H).
 Qed.
 
-Lemma NNPP: forall P: Prop, ~~P -> C P.
+Lemma NNPP: forall (b: Prop -> Prop) (P: Prop), b P -> ~~P -> C b P.
 Proof.
-intros P Hnnp.
+intros b P HP Hnnp.
 exm P; decided.
 assumption.
 specialize (Hnnp H); inversion Hnnp.
 Qed.
 
 
-Lemma Peirce: forall P: Prop, ((P -> False) -> P) -> C P.
+Lemma Peirce: forall (b: Prop -> Prop) (P: Prop), b P -> ((P -> False) -> P) -> C b P.
 Proof.
-intros P H.
+intros b P HP H.
 exm P; decided. assumption.
 apply H in H0. assumption.
 Qed.
 
-Lemma not_imply_elim: forall P Q: Prop, ~ (P -> Q) -> C P.
+Lemma not_imply_elim: forall (b: Prop -> Prop) (P Q: Prop), b P -> ~ (P -> Q) -> C b P.
 Proof.
-intros P Q H. apply NNPP. red.
+intros b P Q HP H. apply (NNPP b). assumption. red.
 intro. apply H. intro. absurd P; assumption.
 Qed.
 
-Lemma not_imply_elim2: forall P Q: Prop, ~ (P -> Q) -> C (~ Q).
+Lemma not_imply_elim2: forall (b: Prop -> Prop) (P Q: Prop), b Q -> ~ (P -> Q) -> C b (~ Q).
 Proof.
-intros P Q H. exm Q; decided. assert False. apply H. intro; assumption.
+intros b P Q HQ H. exm Q; decided. assert False. apply H. intro; assumption.
 inversion H1. assumption.
 Qed.
 
-Lemma imply_to_or: forall P Q: Prop, (P -> Q) -> C (~ P \/ Q).
+Lemma imply_to_or: forall (b: Prop -> Prop) (P Q: Prop), b P -> (P -> Q) -> C b (~ P \/ Q).
 Proof.
-intros P Q H. exm P; decided. right. apply (H H0).
+intros b P Q HP H. exm P; decided. right. apply (H H0).
 left. assumption.
 Qed.
 
-Lemma imply_to_and: forall P Q: Prop, ~ (P -> Q) -> C (P /\ ~ Q).
+Lemma imply_to_and: forall (b: Prop -> Prop) (P Q: Prop), b P -> b Q -> ~ (P -> Q) -> C b (P /\ ~ Q).
 Proof.
-intros P Q H.
-csplit. apply (not_imply_elim P Q H). apply (not_imply_elim2 P Q H).
+intros b P Q HP HQ H.
+csplit. apply (not_imply_elim b P Q HP H). apply (not_imply_elim2 b P Q HQ H).
 Qed.
 
-Lemma or_to_imply: forall P Q: Prop, ~ P \/ Q -> P -> C Q.
+Lemma or_to_imply: forall (b: Prop -> Prop) (P Q: Prop), b Q -> ~ P \/ Q -> P -> C b Q.
 Proof.
-intros P Q H H1.
+intros b P Q HQ H H1.
 destruct H.
 absurd P; assumption.
 cassumption.
 Qed.
 
-Lemma not_and_or: forall P Q: Prop, ~ (P /\ Q) -> C ( ~P \/ ~Q ).
+Lemma not_and_or: forall (b: Prop -> Prop) (P Q: Prop), b P -> b Q -> ~ (P /\ Q) -> C b ( ~P \/ ~Q ).
 Proof.
-intros P Q H.
+intros b P Q HP HQ H.
 exm P. exm Q. pose proof (conj H0 H1). absurd (P /\ Q); assumption.
 all: decided. right; assumption. left; assumption.
 Qed.
 
-Lemma not_all_not_ex: forall (U: Type) (P: U -> Prop) , ~(forall n: U, ~ P n) -> C (exists n: U, P n).
+Lemma not_all_not_ex: forall (b: Prop -> Prop) (U: Type) (P: U -> Prop), b (exists n : U, P n) -> ~(forall n: U, ~ P n) -> C b (exists n: U, P n).
 Proof.
-intros U P H.
+intros b U P HP H.
 apply NNPP.
+assumption.
 intro abs.
 apply H.
 intros n H2.
@@ -274,18 +286,23 @@ apply abs; exists n; exact H2.
 Qed.
 
 
-Lemma not_all_ex_not_p: forall (O: Prop -> Prop) , ~(forall P: Prop, O P) -> C (exists P: Prop, ~ O P).
+Lemma not_all_ex_not_p: forall (b O: Prop -> Prop) ,
+  b (exists n : Prop, (fun x : Prop => ~ O x) n) ->
+  b (forall n: Prop, ~ ~ O n) ->
+  (forall n: Prop, (b (O n))) ->
+  ~(forall P: Prop, O P) -> C b (exists P: Prop, ~ O P).
 Proof.
-intros O H.
-pose proof (not_all_not_ex _ (fun x => ~ O x)). cremove. apply c_unit in H0.
-apply (cremove_hyp _ _ H0).
+intros b O HP HQ HR H.
+pose proof (not_all_not_ex b _ (fun x => ~ O x) HP). cremove. apply (c_unit b) in H0.
+apply (cremove_hyp _ _ _ H0).
 apply classic_not.
+assumption.
 intro Hall.
 unfold not in H.
-apply c_unit in H.
-cremove_3 H (forall n : Prop, O n) False.
+apply (c_unit b) in H.
+cremove_3 b H (forall n : Prop, O n) False.
 apply H. cremove. apply c_prop1. intro n. specialize (Hall n).
-apply NNPP in Hall. assumption.
+apply (NNPP b) in Hall. assumption. apply HR.
 Qed.
 
 Inductive CI: Prop -> Prop :=
@@ -298,7 +315,7 @@ Inductive CI: Prop -> Prop :=
 
 
 
-Lemma if_exm: forall P: Prop, (forall Q: Prop, Q \/ ~ Q) -> CI P -> P.
+Lemma if_exm: forall P: Prop, Lem (fun _: Prop => True) -> CI P -> P.
   Proof.
       intros P H CI.
       induction CI.
@@ -306,7 +323,7 @@ Lemma if_exm: forall P: Prop, (forall Q: Prop, Q \/ ~ Q) -> CI P -> P.
       assumption.
       assumption.
       apply (H1 IHCI).
-      apply (H P).
+      apply (H P). trivial.
 Qed.
 
 Ltac ciremove_0 H X Y Z := let a := fresh "H" in pose proof (ci_prop2 _ _ H) as a;
@@ -561,7 +578,7 @@ Proof.
     ciremove. absurd x; assumption.
 Qed.
 
-Lemma using_ciexm: forall A: Prop, (Lem -> A) -> CI A.
+Lemma using_ciexm: forall A: Prop, (Lem (fun _ => True) -> A) -> CI A.
 Proof.
     intros A H.
     apply using_CI.
@@ -569,18 +586,25 @@ Proof.
     assert (forall P: Prop, P \/ ~P).
     intro P.
     pose proof (ci_lem P). specialize (Hctoi (P \/ ~P) H0). assumption.
-    apply (H H0).
+    assert (Lem (fun _: Prop => True)).
+    unfold Lem. intros. apply H0.
+    apply (H H1).
 Qed.
 
 
   
-Theorem equiv_C_CI: forall P: Prop, C P <-> CI P.
+Theorem equiv_C_CI: forall P: Prop, C (fun _ => True) P <-> CI P.
 Proof.
     split; intro H.
     apply using_ciexm. assumption.
     intro Hciexm. apply (if_exm _ Hciexm H).
 Qed.
 
+Definition ci_proof_lem: CI (Lem (fun _ => True)).
+Proof.
+    apply using_ciexm.
+    intro H; apply H.
+Qed.
 
 Definition weak_lem :=
 (fun (P : Prop) (vnP : P -> False) (vnnP : ~ P -> False) => vnnP vnP)
@@ -703,4 +727,4 @@ intro nP.
 apply (weak_lem (~~P)).
 intro nnnP. apply (nnnP nP).
 intro nnnP. apply (H nnnP).
-Qed.
+Qed.`
